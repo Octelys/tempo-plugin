@@ -1,0 +1,9 @@
+[versions]
+kotlin = "2.4.0" # https://plugins.jetbrains.com/docs/intellij/using-kotlin.html#kotlin-standard-library
+junit = "4.13.2"
+
+[libraries]
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+[plugins]
+kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

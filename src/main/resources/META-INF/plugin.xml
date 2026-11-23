@@ -1,0 +1,61 @@
+<idea-plugin>
+  <id>com.octelys.plugins.tempo</id>
+  <name>Tempo Time Tracker</name>
+  <version>_PLACEHOLDER_</version>
+  <vendor url="https://octelys.com">Octelys</vendor>
+
+  <description>
+<![CDATA[
+<p>Tracks the time you actively spend in the IDE and logs it to <a href="https://www.tempo.io/">Tempo</a> on Jira Cloud.</p>
+<ul>
+  <li>Counts time only while you are using the IDE; idle time is never logged.</li>
+  <li>Picks the Jira issue from the branch name (for example <code>features/ABC-123-new-login</code>), a manual choice, or a project default.</li>
+  <li>Keeps one worklog per issue and day, updated as you go.</li>
+  <li>Sends worklogs automatically at a set interval, or when you ask.</li>
+</ul>
+]]>
+  </description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends optional="true" config-file="tempo-withGit.xml">Git4Idea</depends>
+
+  <extensionPoints>
+    <extensionPoint qualifiedName="com.octelys.plugins.tempo.branchNameProvider"
+                    interface="com.octelys.plugins.tempo.tracking.BranchNameProvider"
+                    dynamic="true"/>
+  </extensionPoints>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <postStartupActivity implementation="com.octelys.plugins.tempo.tracking.TempoStartupActivity"/>
+    <projectConfigurable parentId="tools"
+                         id="com.octelys.plugins.tempo.settings"
+                         displayName="Tempo"
+                         instance="com.octelys.plugins.tempo.settings.TempoConfigurable"/>
+    <statusBarWidgetFactory id="TempoStatusBarWidget"
+                            implementation="com.octelys.plugins.tempo.ui.TempoStatusBarWidgetFactory"/>
+    <notificationGroup id="Tempo" displayType="BALLOON"/>
+  </extensions>
+
+  <actions>
+    <group id="Tempo.Actions" text="Tempo" popup="true">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <action id="Tempo.SubmitWorklogs"
+              class="com.octelys.plugins.tempo.actions.SubmitWorklogsAction"
+              text="Submit Worklogs"
+              description="Send the time tracked so far to Tempo"/>
+      <action id="Tempo.SetIssue"
+              class="com.octelys.plugins.tempo.actions.SetIssueAction"
+              text="Set Issue…"
+              description="Choose the Jira issue time is logged against in this project"/>
+      <action id="Tempo.DiscardPending"
+              class="com.octelys.plugins.tempo.actions.DiscardPendingAction"
+              text="Discard Pending Time…"
+              description="Forget tracked time that was not sent to Tempo yet"/>
+      <separator/>
+      <action id="Tempo.OpenSettings"
+              class="com.octelys.plugins.tempo.actions.OpenSettingsAction"
+              text="Settings…"
+              description="Configure the Jira and Tempo connection"/>
+    </group>
+  </actions>
+</idea-plugin>

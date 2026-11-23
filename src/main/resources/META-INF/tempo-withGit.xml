@@ -1,0 +1,5 @@
+<idea-plugin>
+  <extensions defaultExtensionNs="com.octelys.plugins.tempo">
+    <branchNameProvider implementation="com.octelys.plugins.tempo.tracking.GitBranchNameProvider"/>
+  </extensions>
+</idea-plugin>

@@ -1,0 +1,52 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: set version number
+        run: |
+          YEAR=$(date +'%y')
+          MONTH=$(date +'%m')
+          DAY=$(date +'%d')
+          REV=$(printf "%02d" ${{ github.run_number }})
+          VERSION="$YEAR.$MONTH.$DAY$REV"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+        shell: bash
+
+      - name: update version (gradle & plugin.xml)
+        shell: bash
+        run: ./update-version.sh ${{ env.VERSION }}
+
+      - name: install Java JDK
+        uses: actions/setup-java@v6.1.0
+        with:
+          java-version: 21
+          distribution: 'temurin'
+
+      - name: setup gradle
+        uses: gradle/actions/setup-gradle@v6.4.0
+
+      - name: test
+        run: ./gradlew test -PPluginVersion=${{ env.VERSION }}
+
+      - name: build
+        run: ./gradlew buildPlugin -PPluginVersion=${{ env.VERSION }}
+
+      - name: publish plugin artifact
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: tempo.${{ env.VERSION }}
+          path: build/distributions/*.zip
