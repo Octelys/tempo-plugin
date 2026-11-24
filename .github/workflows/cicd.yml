@@ -104,10 +104,10 @@ jobs:
         run: ./gradlew buildPlugin -PPluginVersion=${{ env.VERSION }}
 
       # buildPlugin produces tempo-<version>.zip holding tempo/lib/*.jar (plugin.xml and
-      # pluginIcon.svg live inside the main jar). upload-artifact zips whatever it is given,
-      # so uploading that zip would nest it in a second zip. Extract it instead: the
-      # downloaded artifact is then the plugin itself, ready for "Install Plugin from Disk".
-      - name: setup plugin
+      # pluginIcon.svg live inside the main jar). That zip is uploaded as-is (archive: false),
+      # so the downloaded artifact is the file "Install Plugin from Disk" expects; no
+      # unzipping and re-zipping by hand, which adds a __MACOSX/ root on macOS and breaks it.
+      - name: verify plugin
         shell: bash
         run: |
           distribution="build/distributions/tempo-${{ env.VERSION }}.zip"
@@ -116,21 +116,26 @@ jobs:
             ls -la build/distributions || true
             exit 1
           fi
-          rm -rf publish
-          mkdir -p publish
-          unzip -q "$distribution" -d publish
-          jar="publish/tempo/lib/tempo-${{ env.VERSION }}.jar"
-          if [ ! -f "$jar" ]; then
-            echo "::error::Plugin jar not found at $jar"
+          roots=$(unzip -Z1 "$distribution" | cut -d/ -f1 | sort -u)
+          if [ "$roots" != "tempo" ]; then
+            echo "::error::Plugin zip must have a single tempo/ root, found: $roots"
             exit 1
           fi
-          unzip -l "$jar" | grep -q 'META-INF/plugin.xml' || { echo "::error::plugin.xml missing from $jar"; exit 1; }
-          unzip -p "$jar" META-INF/plugin.xml | grep -q "<version>${{ env.VERSION }}</version>" || { echo "::error::plugin.xml was not stamped with ${{ env.VERSION }}"; exit 1; }
-          find publish -type f
+          check=$(mktemp -d)
+          unzip -q "$distribution" -d "$check"
+          jar="$check/tempo/lib/tempo-${{ env.VERSION }}.jar"
+          if [ ! -f "$jar" ]; then
+            echo "::error::Plugin jar not found at tempo/lib/tempo-${{ env.VERSION }}.jar"
+            exit 1
+          fi
+          descriptor=$(unzip -p "$jar" META-INF/plugin.xml) || { echo "::error::plugin.xml missing from the plugin jar"; exit 1; }
+          grep -q "<version>${{ env.VERSION }}</version>" <<< "$descriptor" || { echo "::error::plugin.xml was not stamped with ${{ env.VERSION }}"; exit 1; }
+          grep -o '<idea-version[^>]*>' <<< "$descriptor" || { echo "::error::plugin.xml has no idea-version"; exit 1; }
+          echo "DISTRIBUTION=$distribution" >> $GITHUB_ENV
 
       - name: publish plugin
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: tempo.${{ env.VERSION }}
-          path: publish
+          path: ${{ env.DISTRIBUTION }}
+          archive: false
           if-no-files-found: error
