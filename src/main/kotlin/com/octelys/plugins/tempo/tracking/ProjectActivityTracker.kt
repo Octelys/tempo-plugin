@@ -66,9 +66,25 @@ class ProjectActivityTracker(private val project: Project) : Disposable {
         TempoListener.publish()
     }
 
+    /** Counts the open session's time so far into today's total, so a restart does not lose it. */
+    fun countOpenSession() {
+        val open = synchronized(sessionizer) { sessionizer.openSession } ?: return
+        if (!project.isDisposed) ProjectTimeToday.getInstance(project).add(open)
+    }
+
+    /** Active time in this project today, including the session still open. */
+    fun millisToday(): Long {
+        val open = synchronized(sessionizer) { sessionizer.openSession }
+        return ProjectTimeToday.getInstance(project).millis(open)
+    }
+
     override fun dispose() = close()
 
-    private fun store(session: WorkSession) = WorklogLedger.getInstance().add(session)
+    private fun store(session: WorkSession) {
+        WorklogLedger.getInstance().add(session)
+        // On project close the session still reaches the ledger, but project services may be gone.
+        if (!project.isDisposed) ProjectTimeToday.getInstance(project).add(session)
+    }
 
     companion object {
         fun getInstance(project: Project): ProjectActivityTracker = project.service()

@@ -68,5 +68,15 @@ class SessionizerTest {
         assertNull(sessionizer.close())
     }
 
+    @Test
+    fun `the open session is reported up to its last activity without closing it`() {
+        sessionizer.onActivity(minutes(0), "ABC-1")
+        sessionizer.onActivity(minutes(4), "ABC-1")
+
+        assertEquals(WorkSession("ABC-1", minutes(0), minutes(4)), sessionizer.openSession)
+        assertEquals(WorkSession("ABC-1", minutes(0), minutes(4)), sessionizer.close())
+        assertNull(sessionizer.openSession)
+    }
+
     private fun minutes(value: Int): Long = value * 60_000L
 }

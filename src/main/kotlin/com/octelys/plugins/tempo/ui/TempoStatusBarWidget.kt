@@ -3,6 +3,7 @@ package com.octelys.plugins.tempo.ui
 import com.octelys.plugins.tempo.core.Durations
 import com.octelys.plugins.tempo.ledger.WorklogLedger
 import com.octelys.plugins.tempo.tracking.IssueResolver
+import com.octelys.plugins.tempo.tracking.ProjectActivityTracker
 import com.octelys.plugins.tempo.tracking.TempoListener
 import com.intellij.openapi.actionSystem.ActionGroup
 import com.intellij.openapi.actionSystem.ActionManager
@@ -25,7 +26,10 @@ class TempoStatusBarWidgetFactory : StatusBarWidgetFactory {
     override fun createWidget(project: Project): StatusBarWidget = TempoStatusBarWidget(project)
 }
 
-/** Shows the issue time is going to and the time not yet sent to Tempo; click for actions. */
+/**
+ * Shows the issue time is going to, the time spent in this project today, and the time not yet
+ * sent to Tempo; click for actions.
+ */
 class TempoStatusBarWidget(private val project: Project) : StatusBarWidget, StatusBarWidget.TextPresentation {
     private var statusBar: StatusBar? = null
 
@@ -43,14 +47,18 @@ class TempoStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
 
     override fun getText(): String {
         val issue = IssueResolver.resolve(project)?.key ?: "no issue"
+        val todaySeconds = ProjectActivityTracker.getInstance(project).millisToday() / 1000
         val pendingSeconds = WorklogLedger.getInstance().pending().sumOf { it.durationMillis } / 1000
-        return if (pendingSeconds >= 60) "Tempo: $issue · ${Durations.format(pendingSeconds)} pending" else "Tempo: $issue"
+        val pending = if (pendingSeconds >= 60) " · ${Durations.format(pendingSeconds)} pending" else ""
+        return "Tempo: $issue · ${Durations.format(todaySeconds)} today$pending"
     }
 
     override fun getTooltipText(): String {
+        val today = Durations.format(ProjectActivityTracker.getInstance(project).millisToday() / 1000)
+        val spent = "$today spent in ${project.name} today."
         val issue = IssueResolver.resolve(project)
-            ?: return "No issue to log time against. Click to set one, or check out a branch named after an issue."
-        return "Logging time on ${issue.key} (${issue.source.label}). Click for Tempo actions."
+            ?: return "No issue to log time against. Click to set one, or check out a branch named after an issue. $spent"
+        return "Logging time on ${issue.key} (${issue.source.label}). $spent Click for Tempo actions."
     }
 
     override fun getAlignment() = Component.LEFT_ALIGNMENT
