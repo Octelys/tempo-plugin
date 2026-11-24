@@ -50,7 +50,11 @@ class ActivityMonitor : Disposable {
 
     private fun onTick() {
         val now = System.currentTimeMillis()
-        openProjects().forEach { ProjectActivityTracker.getInstance(it).closeIfIdle(now) }
+        openProjects().forEach { project ->
+            val tracker = ProjectActivityTracker.getInstance(project)
+            tracker.closeIfIdle(now)
+            tracker.countOpenSession()
+        }
 
         val settings = TempoSettings.getInstance()
         if (settings.submissionMode == SubmissionMode.AUTOMATIC &&

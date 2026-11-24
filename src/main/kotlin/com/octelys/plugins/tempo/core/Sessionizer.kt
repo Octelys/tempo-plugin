@@ -21,6 +21,9 @@ class Sessionizer(private val idleThresholdMillis: () -> Long) {
 
     val currentIssueKey: String? get() = issueKey
 
+    /** The open session up to its last activity, without closing it; null when none is open. */
+    val openSession: WorkSession? get() = closedAt(lastActivityMillis)
+
     /** Records activity on [activeIssueKey] at [nowMillis]; returns the session this closes, if any. */
     fun onActivity(nowMillis: Long, activeIssueKey: String): WorkSession? {
         val openKey = issueKey
