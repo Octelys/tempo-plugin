@@ -11,3 +11,4 @@ output
 *.iml
 /**/.intellijPlatform
 .DS_Store
+/**/.playwright-mcp/
