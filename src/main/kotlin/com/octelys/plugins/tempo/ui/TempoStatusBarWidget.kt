@@ -49,7 +49,7 @@ class TempoStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         val issue = IssueResolver.resolve(project)?.key ?: "no issue"
         val todaySeconds = ProjectActivityTracker.getInstance(project).millisToday() / 1000
         val pendingSeconds = WorklogLedger.getInstance().pending().sumOf { it.durationMillis } / 1000
-        val pending = if (pendingSeconds >= 60) " · ${Durations.format(pendingSeconds)} pending" else ""
+        val pending = if (pendingSeconds >= 30) " · ${Durations.format(pendingSeconds)} pending" else ""
         return "Tempo: $issue · ${Durations.format(todaySeconds)} today$pending"
     }
 
