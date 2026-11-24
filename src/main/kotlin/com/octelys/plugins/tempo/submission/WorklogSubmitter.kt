@@ -5,6 +5,8 @@ import com.octelys.plugins.tempo.api.JiraClient
 import com.octelys.plugins.tempo.api.JiraIssue
 import com.octelys.plugins.tempo.api.TempoClient
 import com.octelys.plugins.tempo.api.TempoWorklog
+import com.octelys.plugins.tempo.auth.ConfigurationMissingException
+import com.octelys.plugins.tempo.auth.TempoAuth
 import com.octelys.plugins.tempo.core.Durations
 import com.octelys.plugins.tempo.core.PlannedWorklog
 import com.octelys.plugins.tempo.core.WorklogPlanner
@@ -66,8 +68,6 @@ class WorklogSubmitter {
             }
         }.queue()
     }
-
-    private class ConfigurationMissingException(message: String) : Exception(message)
 
     private class Outcome(val submitted: List<PlannedWorklog>, val failures: List<String>, val nothingToSubmit: Boolean)
 
@@ -164,11 +164,8 @@ class WorklogSubmitter {
         return JiraClient(settings.jiraSiteUrl, settings.jiraEmail, token)
     }
 
-    private fun tempoClient(settings: TempoSettings): TempoClient {
-        val token = TempoCredentials.tempoApiToken
-            ?: throw ConfigurationMissingException("Set your Tempo API token to submit worklogs.")
-        return TempoClient(settings.tempoApiUrl, token)
-    }
+    private fun tempoClient(settings: TempoSettings): TempoClient =
+        TempoClient(settings.tempoApiUrl, TempoAuth.bearerToken(settings))
 
     private fun accountId(settings: TempoSettings, jira: JiraClient): String =
         settings.state.jiraAccountId?.takeIf { it.isNotBlank() }

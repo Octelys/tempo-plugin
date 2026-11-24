@@ -35,6 +35,48 @@ class IssueKeysTest {
     }
 
     @Test
+    fun `find with no pattern uses the built-in detection`() {
+        assertEquals("ABC-123", IssueKeys.find("features/ABC-123-new-login", null))
+    }
+
+    @Test
+    fun `find with a pattern uses its named key group`() {
+        val pattern = IssueKeys.compilePattern("""^\w+/(?<prefix>\w+)/(?<key>[A-Z]+-\d+)""")
+        assertEquals("PAY-42", IssueKeys.find("team/web/PAY-42-checkout", pattern))
+    }
+
+    @Test
+    fun `find with a pattern uses group 1 when there is no key group`() {
+        val pattern = IssueKeys.compilePattern("""^dev/(\w+-\d+)""")
+        assertEquals("ABC-9", IssueKeys.find("dev/abc-9_fix", pattern))
+    }
+
+    @Test
+    fun `find with a pattern uses the whole match when there are no groups`() {
+        val pattern = IssueKeys.compilePattern("""OPS-\d+""")
+        assertEquals("OPS-3", IssueKeys.find("feature/ABC-1/OPS-3", pattern))
+    }
+
+    @Test
+    fun `find with a pattern rejects matches that are not issue keys`() {
+        val pattern = IssueKeys.compilePattern("""^release/(.+)$""")
+        assertNull(IssueKeys.find("release/2026-11", pattern))
+        assertNull(IssueKeys.find("main", pattern))
+    }
+
+    @Test
+    fun `compilePattern treats blank as no pattern`() {
+        assertNull(IssueKeys.compilePattern(""))
+        assertNull(IssueKeys.compilePattern("  "))
+        assertNull(IssueKeys.compilePattern(null))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `compilePattern rejects an invalid regular expression`() {
+        IssueKeys.compilePattern("(unclosed")
+    }
+
+    @Test
     fun `normalize accepts and uppercases a key`() {
         assertEquals("ABC-12", IssueKeys.normalize("  abc-12 "))
     }

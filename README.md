@@ -14,8 +14,8 @@ Tracks the time you actively spend in Rider (or any JetBrains IDE) and logs it t
   3. the project's default issue (*Settings › Tools › Tempo*).
 - **One worklog per issue and day.** Later submissions update that worklog in Tempo instead of
   adding new ones.
-- **Automatic or on-demand submission.** Send every N minutes, or only when you run
-  *Tools › Tempo › Submit Worklogs*.
+- **Automatic or on-demand submission.** Send every N minutes (default: automatically, every
+  5 minutes), or only when you run *Tools › Tempo › Submit Worklogs*.
 - **Nothing gets lost.** Unsent time is saved and survives IDE restarts.
 
 ## Setup
