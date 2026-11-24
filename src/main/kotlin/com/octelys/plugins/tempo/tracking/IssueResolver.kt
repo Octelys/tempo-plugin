@@ -2,6 +2,7 @@ package com.octelys.plugins.tempo.tracking
 
 import com.octelys.plugins.tempo.core.IssueKeys
 import com.octelys.plugins.tempo.settings.TempoProjectSettings
+import com.octelys.plugins.tempo.settings.TempoSettings
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 
@@ -32,8 +33,9 @@ object IssueResolver {
 
         IssueKeys.normalize(settings.issueOverride)?.let { return ResolvedIssue(it, IssueSource.OVERRIDE) }
 
+        val branchPattern = TempoSettings.getInstance().branchIssuePattern
         BranchNameProvider.EP_NAME.extensionList.firstNotNullOfOrNull { provider ->
-            IssueKeys.find(runCatching { provider.currentBranchName(project) }.getOrNull())
+            IssueKeys.find(runCatching { provider.currentBranchName(project) }.getOrNull(), branchPattern)
         }?.let { return ResolvedIssue(it, IssueSource.BRANCH) }
 
         IssueKeys.normalize(settings.defaultIssue)?.let { return ResolvedIssue(it, IssueSource.DEFAULT) }

@@ -2,6 +2,7 @@ package com.octelys.plugins.tempo.api
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.octelys.plugins.tempo.core.TempoOAuth
 import java.net.ProxySelector
 import java.net.URI
 import java.net.URLEncoder
@@ -47,11 +48,17 @@ private fun errorMessageOf(body: String): String = runCatching {
         json.getAsJsonArray("errorMessages")?.forEach { add(it.asString) }
         json.getAsJsonObject("errors")?.entrySet()?.forEach { (field, message) -> add("$field: ${message.asString}") }
         json.get("message")?.takeIf { it.isJsonPrimitive }?.asString?.let(::add)
+        // OAuth 2.0 errors: {"error": "invalid_grant", "error_description": "..."}
+        json.get("error")?.takeIf { it.isJsonPrimitive }?.asString?.let { error ->
+            add(json.get("error_description")?.takeIf { it.isJsonPrimitive }?.asString?.let { "$error: $it" } ?: error)
+        }
     }
     messages.joinToString("; ").ifEmpty { body.take(300) }
 }.getOrElse { body.take(300) }
 
 data class JiraIssue(val id: Long, val key: String, val summary: String)
+
+data class JiraUser(val accountId: String, val displayName: String)
 
 /** Jira Cloud REST API v3, authenticated with an Atlassian account email and API token. */
 class JiraClient(siteUrl: String, email: String, apiToken: String) {
@@ -59,8 +66,15 @@ class JiraClient(siteUrl: String, email: String, apiToken: String) {
     private val authorization = "Basic " + Base64.getEncoder()
         .encodeToString("$email:$apiToken".toByteArray(StandardCharsets.UTF_8))
 
-    fun myAccountId(): String =
-        get("/rest/api/3/myself").get("accountId").asString
+    fun myAccountId(): String = myself().accountId
+
+    fun myself(): JiraUser {
+        val json = get("/rest/api/3/myself")
+        return JiraUser(
+            accountId = json.get("accountId").asString,
+            displayName = json.get("displayName")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
+        )
+    }
 
     fun issue(key: String): JiraIssue {
         val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
@@ -85,9 +99,68 @@ data class TempoWorklog(
     val description: String,
 )
 
-/** Tempo Cloud REST API v4, authenticated with a Tempo API token. */
+/** Tokens returned by Tempo's OAuth token endpoint. */
+data class TempoOAuthTokens(val accessToken: String, val refreshToken: String, val expiresAtMillis: Long)
+
+/**
+ * Tempo's OAuth 2.0 token endpoints. Tempo documents a [clientSecret] on every call; it is sent
+ * only when set, so that a public client can try without one.
+ */
+class TempoOAuthClient(private val clientId: String, clientSecret: String?) {
+    private val clientSecret = clientSecret?.takeIf { it.isNotBlank() }
+
+    fun exchangeCode(code: String, redirectUri: String = TempoOAuth.REDIRECT_URI): TempoOAuthTokens = tokens(
+        "grant_type" to "authorization_code",
+        "redirect_uri" to redirectUri,
+        "code" to code,
+    )
+
+    /** Tempo rotates refresh tokens: the returned pair replaces the old one, which stops working. */
+    fun refresh(refreshToken: String, redirectUri: String = TempoOAuth.REDIRECT_URI): TempoOAuthTokens = tokens(
+        "grant_type" to "refresh_token",
+        "redirect_uri" to redirectUri,
+        "refresh_token" to refreshToken,
+    )
+
+    fun revoke(token: String, tokenTypeHint: String) {
+        post(
+            TempoOAuth.REVOKE_URL,
+            "token_type_hint" to tokenTypeHint,
+            "token" to token,
+        )
+    }
+
+    private fun tokens(vararg form: Pair<String, String>): TempoOAuthTokens {
+        val json = post(TempoOAuth.TOKEN_URL, *form)
+        val expiresIn = json.get("expires_in")?.takeIf { it.isJsonPrimitive }?.asLong ?: 0L
+        return TempoOAuthTokens(
+            accessToken = json.get("access_token").asString,
+            refreshToken = json.get("refresh_token").asString,
+            expiresAtMillis = if (expiresIn > 0) System.currentTimeMillis() + expiresIn * 1000 else 0L,
+        )
+    }
+
+    private fun post(url: String, vararg form: Pair<String, String>): JsonObject {
+        val client = listOfNotNull("client_id" to clientId, clientSecret?.let { "client_secret" to it })
+        val body = TempoOAuth.formEncode(*(form.toList() + client).toTypedArray())
+        return send(
+            HttpRequest.newBuilder(URI.create(url))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)),
+            "Tempo login",
+        )
+    }
+}
+
+/** Tempo Cloud REST API v4, authenticated with a bearer token: an API token or an OAuth access token. */
 class TempoClient(apiUrl: String, private val apiToken: String) {
     private val baseUrl = apiUrl.trimEnd('/')
+
+    /** Makes the smallest authenticated read, to check the URL and token. Throws when either is wrong. */
+    fun ping() {
+        val today = LocalDate.now().toString()
+        send(request("/worklogs?from=$today&to=$today&limit=1").GET(), "Tempo")
+    }
 
     /** Returns the new worklog's `tempoWorklogId`. */
     fun create(worklog: TempoWorklog): Long =

@@ -12,7 +12,8 @@ JetBrains IDE. It is compiled against Rider (`ProductVersion` in `gradle.propert
 | `src/main/kotlin/.../tracking` | Input listener, per-project session tracking, issue resolution, Git branch lookup |
 | `src/main/kotlin/.../ledger` | Persisted pending sessions and submitted worklogs (`tempo-worklogs.xml`) |
 | `src/main/kotlin/.../submission` | Sends worklogs to Tempo; notifications |
-| `src/main/kotlin/.../api` | Jira Cloud v3 and Tempo v4 REST clients |
+| `src/main/kotlin/.../api` | Jira Cloud v3 and Tempo v4 REST clients, Tempo OAuth token endpoints |
+| `src/main/kotlin/.../auth` | Tempo bearer token (API token or OAuth, with refresh) and the browser login flow |
 | `src/main/kotlin/.../settings`, `ui`, `actions` | Settings page, status bar widget, Tools › Tempo menu |
 | `src/main/resources/META-INF` | `plugin.xml`, plus `tempo-withGit.xml` loaded only when Git is enabled |
 
