@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+  <defs>
+    <linearGradient id="tile" x1="8" y1="4" x2="32" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#183c5c"/>
+      <stop offset="1" stop-color="#0b2135"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="11" y1="10" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f3d687"/>
+      <stop offset="1" stop-color="#c79a3e"/>
+    </linearGradient>
+    <radialGradient id="face" cx="20" cy="18" r="8" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1d4466"/>
+      <stop offset="1" stop-color="#0a1d2e"/>
+    </radialGradient>
+  </defs>
+  <rect x="3.5" y="3.5" width="33" height="33" rx="8.5" fill="url(#tile)" stroke="#3f5f7b"/>
+  <circle cx="20" cy="20" r="7.3" fill="url(#face)" stroke="#2c4a66" stroke-width="0.6"/>
+  <path d="M20.62 17.68L21.71 13.62M21.20 17.92L23.30 14.28M21.70 18.30L24.67 15.33M22.08 18.80L25.72 16.70M22.32 19.38L26.38 18.29M22.32 20.62L26.38 21.71M22.08 21.20L25.72 23.30M21.70 21.70L24.67 24.67M21.20 22.08L23.30 25.72M20.62 22.32L21.71 26.38M19.38 22.32L18.29 26.38M18.80 22.08L16.70 25.72M18.30 21.70L15.33 24.67M17.92 21.20L14.28 23.30M17.68 20.62L13.62 21.71M17.68 19.38L13.62 18.29M18.30 18.30L15.33 15.33M18.80 17.92L16.70 14.28M19.38 17.68L18.29 13.62" stroke="#3a6185" stroke-width="0.35" stroke-linecap="round" stroke-opacity="0.8"/>
+  <path d="M27.00 20.00L25.80 20.00M20.00 27.00L20.00 25.80M13.00 20.00L14.20 20.00" stroke="url(#gold)" stroke-width="0.9" stroke-linecap="round"/>
+  <path d="M29.04 22.94A9.5 9.5 0 1 1 28.39 15.54" fill="none" stroke="url(#gold)" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M30.45 14.10L29.66 17.92L26.04 16.45Z" fill="#e2bb5d" stroke="#e2bb5d" stroke-width="0.9" stroke-linejoin="round"/>
+  <path d="M20.81 19.20L16.28 17.04A0.70 0.70 0 0 0 15.58 18.26L19.71 21.10Z" fill="#f8fbff"/>
+  <path d="M20.90 20.30L20.50 13.30A0.50 0.50 0 0 0 19.50 13.30L19.10 20.30Z" fill="#f0cf75"/>
+  <circle cx="20" cy="20" r="1.55" fill="url(#gold)"/>
+  <circle cx="20" cy="20" r="0.6" fill="#0f2a42"/>
+</svg>

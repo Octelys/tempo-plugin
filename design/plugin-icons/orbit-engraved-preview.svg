@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="244" viewBox="0 0 760 244">
+  <rect width="760" height="244" rx="16" fill="#141922"/>
+  <rect x="20" y="20" width="171" height="204" rx="12" fill="#1e2531"/>
+  <image href="orbit-engraved-sunray.svg" x="57.5" y="26" width="96" height="96"/>
+  <image href="orbit-engraved-sunray.svg" x="85.5" y="134" width="40" height="40"/>
+  <text x="105.5" y="203" fill="#f3f6fb" font-family="system-ui, sans-serif" font-size="15" font-weight="600" text-anchor="middle">Sunray</text>
+  <rect x="203" y="20" width="171" height="204" rx="12" fill="#1e2531"/>
+  <image href="orbit-engraved-chronometer.svg" x="240.5" y="26" width="96" height="96"/>
+  <image href="orbit-engraved-chronometer.svg" x="268.5" y="134" width="40" height="40"/>
+  <text x="288.5" y="203" fill="#f3f6fb" font-family="system-ui, sans-serif" font-size="15" font-weight="600" text-anchor="middle">Chronometer</text>
+  <rect x="386" y="20" width="171" height="204" rx="12" fill="#1e2531"/>
+  <image href="orbit-engraved-elapsed.svg" x="423.5" y="26" width="96" height="96"/>
+  <image href="orbit-engraved-elapsed.svg" x="451.5" y="134" width="40" height="40"/>
+  <text x="471.5" y="203" fill="#f3f6fb" font-family="system-ui, sans-serif" font-size="15" font-weight="600" text-anchor="middle">Elapsed</text>
+  <rect x="569" y="20" width="171" height="204" rx="12" fill="#1e2531"/>
+  <image href="orbit-engraved-code.svg" x="606.5" y="26" width="96" height="96"/>
+  <image href="orbit-engraved-code.svg" x="634.5" y="134" width="40" height="40"/>
+  <text x="654.5" y="203" fill="#f3f6fb" font-family="system-ui, sans-serif" font-size="15" font-weight="600" text-anchor="middle">Code</text>
+</svg>
