@@ -99,6 +99,14 @@ data class TempoWorklog(
     val description: String,
 )
 
+/** A worklog read back from Tempo. */
+data class TempoLoggedWorklog(
+    val tempoWorklogId: Long,
+    val startDate: LocalDate,
+    val startTime: LocalTime,
+    val timeSpentSeconds: Long,
+)
+
 /** Tokens returned by Tempo's OAuth token endpoint. */
 data class TempoOAuthTokens(val accessToken: String, val refreshToken: String, val expiresAtMillis: Long)
 
@@ -169,8 +177,32 @@ class TempoClient(apiUrl: String, private val apiToken: String) {
     fun update(tempoWorklogId: Long, worklog: TempoWorklog): Long =
         send(request("/worklogs/$tempoWorklogId").PUT(body(worklog)), "Tempo").get("tempoWorklogId").asLong
 
-    private fun request(path: String): HttpRequest.Builder =
-        HttpRequest.newBuilder(URI.create(baseUrl + path))
+    /** Every worklog of [accountId] from [from] to [to], both included, following Tempo's pages. */
+    fun worklogsOf(accountId: String, from: LocalDate, to: LocalDate): List<TempoLoggedWorklog> {
+        val account = URLEncoder.encode(accountId, StandardCharsets.UTF_8)
+        var url: String? = "$baseUrl/worklogs/user/$account?from=$from&to=$to&limit=$PAGE_SIZE"
+        val worklogs = mutableListOf<TempoLoggedWorklog>()
+        while (url != null) {
+            val page = send(requestTo(url).GET(), "Tempo")
+            page.getAsJsonArray("results")?.forEach { element ->
+                val json = element.asJsonObject
+                worklogs += TempoLoggedWorklog(
+                    tempoWorklogId = json.get("tempoWorklogId").asLong,
+                    startDate = LocalDate.parse(json.get("startDate").asString),
+                    startTime = json.get("startTime")?.takeIf { it.isJsonPrimitive }?.asString
+                        ?.let(LocalTime::parse) ?: LocalTime.MIDNIGHT,
+                    timeSpentSeconds = json.get("timeSpentSeconds").asLong,
+                )
+            }
+            url = page.getAsJsonObject("metadata")?.get("next")?.takeIf { it.isJsonPrimitive }?.asString
+        }
+        return worklogs
+    }
+
+    private fun request(path: String): HttpRequest.Builder = requestTo(baseUrl + path)
+
+    private fun requestTo(url: String): HttpRequest.Builder =
+        HttpRequest.newBuilder(URI.create(url))
             .header("Authorization", "Bearer $apiToken")
             .header("Content-Type", "application/json")
 
@@ -184,5 +216,9 @@ class TempoClient(apiUrl: String, private val apiToken: String) {
             addProperty("description", worklog.description)
         }
         return HttpRequest.BodyPublishers.ofString(json.toString(), StandardCharsets.UTF_8)
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 1000
     }
 }

@@ -7,8 +7,10 @@ import com.octelys.plugins.tempo.api.TempoClient
 import com.octelys.plugins.tempo.api.TempoWorklog
 import com.octelys.plugins.tempo.auth.ConfigurationMissingException
 import com.octelys.plugins.tempo.auth.TempoAuth
+import com.octelys.plugins.tempo.core.BusySpan
 import com.octelys.plugins.tempo.core.Durations
 import com.octelys.plugins.tempo.core.PlannedWorklog
+import com.octelys.plugins.tempo.core.SubmittedWorklog
 import com.octelys.plugins.tempo.core.WorklogPlanner
 import com.octelys.plugins.tempo.ledger.WorklogLedger
 import com.octelys.plugins.tempo.settings.TempoCredentials
@@ -78,13 +80,24 @@ class WorklogSubmitter {
         val today = LocalDate.now(zone)
 
         ledger.pruneSubmitted(keepFrom = today.minusDays(SUBMITTED_RETENTION_DAYS))
-        val plan = WorklogPlanner.plan(ledger.pending(), ledger.submitted(), settings.roundingMinutes, today, zone)
-        ledger.removePending(plan.discarded)
-        if (plan.worklogs.isEmpty()) return Outcome(emptyList(), emptyList(), nothingToSubmit = true)
+        val pending = ledger.pending()
+        val previouslySubmitted = ledger.submitted()
+
+        // Busy time can only shrink a plan, so when nothing is due there is no need to ask Tempo.
+        val draft = WorklogPlanner.plan(pending, previouslySubmitted, settings.roundingMinutes, today, zone)
+        if (draft.worklogs.isEmpty()) {
+            ledger.removePending(draft.discarded)
+            return Outcome(emptyList(), emptyList(), nothingToSubmit = true)
+        }
 
         val jira = jiraClient(settings)
         val tempo = tempoClient(settings)
         val accountId = accountId(settings, jira)
+
+        val busy = busySpans(tempo, accountId, draft.worklogs.map { it.date }, previouslySubmitted, zone)
+        val plan = WorklogPlanner.plan(pending, previouslySubmitted, settings.roundingMinutes, today, zone, busy)
+        ledger.removePending(plan.discarded)
+        if (plan.worklogs.isEmpty()) return Outcome(emptyList(), emptyList(), nothingToSubmit = true)
 
         val submitted = mutableListOf<PlannedWorklog>()
         val failures = mutableListOf<String>()
@@ -129,12 +142,41 @@ class WorklogSubmitter {
             if (e.statusCode != 404) throw e
             // Deleted in Tempo meanwhile: respect that and log only the time still pending.
             ledger.forgetSubmitted(planned.issueKey, planned.date)
-            val pendingSeconds = planned.sessions.sumOf { it.durationMillis } / 1000
+            val pendingSeconds = planned.pendingSeconds
             val rounded = WorklogPlanner.round(pendingSeconds, TempoSettings.getInstance().roundingMinutes * 60L, isPastDay = true)
                 .coerceAtLeast(60)
             val recreated = planned.copy(totalRawSeconds = pendingSeconds, roundedSeconds = rounded, existingWorklogId = null)
             recreated to tempo.create(worklog.copy(timeSpentSeconds = rounded))
         }
+    }
+
+    /**
+     * Time already logged in Tempo on [dates] by anything but this plugin, such as meetings.
+     * Without permission to read worklogs, tracked time is logged as is.
+     */
+    private fun busySpans(
+        tempo: TempoClient,
+        accountId: String,
+        dates: List<LocalDate>,
+        previouslySubmitted: List<SubmittedWorklog>,
+        zone: ZoneId,
+    ): List<BusySpan> {
+        val logged = try {
+            // One more day, for sessions running past midnight.
+            tempo.worklogsOf(accountId, dates.min(), dates.max().plusDays(1))
+        } catch (e: AtlassianApiException) {
+            if (e.statusCode != 401 && e.statusCode != 403) throw e
+            thisLogger().warn("Cannot read Tempo worklogs, so time already logged is not left out", e)
+            return emptyList()
+        }
+
+        val own = previouslySubmitted.mapTo(HashSet()) { it.tempoWorklogId }
+        return logged
+            .filter { it.tempoWorklogId !in own }
+            .map { worklog ->
+                val start = worklog.startDate.atTime(worklog.startTime).atZone(zone).toInstant().toEpochMilli()
+                BusySpan(start, start + worklog.timeSpentSeconds * 1000)
+            }
     }
 
     private fun report(project: Project?, interactive: Boolean, outcome: Outcome) {
