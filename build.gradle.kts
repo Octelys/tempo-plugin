@@ -68,6 +68,15 @@ intellijPlatform {
     }
 }
 
+tasks.prepareSandbox {
+    // The IDE reads the icon of a plugin installed from disk, until it restarts, from
+    // <plugin>/META-INF/ in the zip, not from inside the jar. Ship a copy there too.
+    from("src/main/resources/META-INF") {
+        include("pluginIcon*.svg")
+        into(pluginName.map { "$it/META-INF" })
+    }
+}
+
 tasks.runIde {
     // Match Rider's default heap size of 1.5Gb (default for runIde is 512Mb)
     maxHeapSize = "1500m"
