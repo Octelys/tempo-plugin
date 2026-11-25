@@ -95,11 +95,71 @@ class WorklogPlannerTest {
         assertEquals(listOf(tiny), plan.discarded)
     }
 
+    @Test
+    fun `time during a meeting already in Tempo is left out`() {
+        val plan = plan(
+            pending = listOf(session("ABC-1", today, "09:30", "11:00")),
+            roundingMinutes = 1,
+            busy = listOf(busy(today, "10:00", "10:15")),
+        )
+
+        val worklog = plan.worklogs.single()
+        assertEquals(75 * 60L, worklog.roundedSeconds)
+        assertEquals(75 * 60L, worklog.pendingSeconds)
+        assertEquals(LocalTime.of(9, 30), worklog.startTime)
+    }
+
+    @Test
+    fun `a new worklog starts after a meeting that covers the start of the session`() {
+        val plan = plan(
+            pending = listOf(session("ABC-1", today, "10:00", "10:45")),
+            roundingMinutes = 1,
+            busy = listOf(busy(today, "09:45", "10:15")),
+        )
+
+        val worklog = plan.worklogs.single()
+        assertEquals(LocalTime.of(10, 15), worklog.startTime)
+        assertEquals(30 * 60L, worklog.roundedSeconds)
+    }
+
+    @Test
+    fun `overlapping meetings are left out once`() {
+        val plan = plan(
+            pending = listOf(session("ABC-1", today, "09:00", "11:00")),
+            roundingMinutes = 1,
+            busy = listOf(busy(today, "09:30", "10:00"), busy(today, "09:45", "10:30")),
+        )
+
+        assertEquals(60 * 60L, plan.worklogs.single().roundedSeconds)
+    }
+
+    @Test
+    fun `a past day's session entirely during a meeting is discarded`() {
+        val covered = session("ABC-1", yesterday, "10:00", "10:15")
+
+        val plan = plan(pending = listOf(covered), roundingMinutes = 15, busy = listOf(busy(yesterday, "10:00", "10:30")))
+
+        assertTrue(plan.worklogs.isEmpty())
+        assertEquals(listOf(covered), plan.discarded)
+    }
+
+    @Test
+    fun `the planned worklog keeps the original sessions so they can be removed from pending`() {
+        val tracked = session("ABC-1", today, "09:30", "11:00")
+
+        val plan = plan(pending = listOf(tracked), roundingMinutes = 1, busy = listOf(busy(today, "10:00", "10:15")))
+
+        assertEquals(listOf(tracked), plan.worklogs.single().sessions)
+    }
+
     private fun plan(
         pending: List<WorkSession>,
         submitted: List<SubmittedWorklog> = emptyList(),
         roundingMinutes: Int,
-    ) = WorklogPlanner.plan(pending, submitted, roundingMinutes, today, zone)
+        busy: List<BusySpan> = emptyList(),
+    ) = WorklogPlanner.plan(pending, submitted, roundingMinutes, today, zone, busy)
+
+    private fun busy(date: LocalDate, start: String, end: String) = BusySpan(millis(date, start), millis(date, end))
 
     private fun session(issueKey: String, date: LocalDate, start: String, end: String) =
         WorkSession(issueKey, millis(date, start), millis(date, end))

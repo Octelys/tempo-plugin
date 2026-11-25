@@ -22,8 +22,9 @@ class ActivityMonitor : Disposable {
     @Volatile
     private var lastRecordedMillis = 0L
 
+    // Zero, so the first tick after startup submits what earlier IDE sessions left pending.
     @Volatile
-    private var lastAutoSubmitMillis = System.currentTimeMillis()
+    private var lastAutoSubmitMillis = 0L
 
     private var tick: ScheduledFuture<*>? = null
 
@@ -53,7 +54,7 @@ class ActivityMonitor : Disposable {
         openProjects().forEach { project ->
             val tracker = ProjectActivityTracker.getInstance(project)
             tracker.closeIfIdle(now)
-            tracker.countOpenSession()
+            tracker.persistOpenSession()
         }
 
         val settings = TempoSettings.getInstance()

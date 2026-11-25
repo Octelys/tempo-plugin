@@ -27,6 +27,7 @@ fun interface TempoListener {
 @Service(Service.Level.PROJECT)
 class ProjectActivityTracker(private val project: Project) : Disposable {
     private val sessionizer = Sessionizer { TempoSettings.getInstance().idleThresholdMillis }
+    private val projectId = project.locationHash
 
     @Volatile
     var currentIssue: ResolvedIssue? = null
@@ -37,26 +38,18 @@ class ProjectActivityTracker(private val project: Project) : Disposable {
         val issueChanged = issue != currentIssue
         currentIssue = issue
 
-        synchronized(sessionizer) {
-            if (issue == null) sessionizer.close() else sessionizer.onActivity(nowMillis, issue.key)
-        }?.let(::store)
+        update { if (issue == null) close() else onActivity(nowMillis, issue.key) }
 
         if (issueChanged) TempoListener.publish()
     }
 
-    fun closeIfIdle(nowMillis: Long) {
-        synchronized(sessionizer) { sessionizer.closeIfIdle(nowMillis) }?.let(::store)
-    }
+    fun closeIfIdle(nowMillis: Long) = update { closeIfIdle(nowMillis) }
 
     /** Moves time tracked so far into the ledger without ending the session. */
-    fun checkpoint() {
-        synchronized(sessionizer) { sessionizer.checkpoint() }?.let(::store)
-    }
+    fun checkpoint() = update { checkpoint() }
 
     /** Ends the current session, for example after the issue was changed by the user. */
-    fun close() {
-        synchronized(sessionizer) { sessionizer.close() }?.let(::store)
-    }
+    fun close() = update { close() }
 
     /** Re-resolves the issue after a settings change, closing the session on the previous one. */
     fun refreshIssue() {
@@ -66,9 +59,14 @@ class ProjectActivityTracker(private val project: Project) : Disposable {
         TempoListener.publish()
     }
 
-    /** Counts the open session's time so far into today's total, so a restart does not lose it. */
-    fun countOpenSession() {
-        val open = synchronized(sessionizer) { sessionizer.openSession } ?: return
+    /**
+     * Records the open session's time so far in the ledger and in today's total, so a crash loses
+     * at most the time since the last call. After a crash, the ledger turns it into pending time.
+     */
+    fun persistOpenSession() {
+        val open = synchronized(sessionizer) {
+            sessionizer.openSession.also { WorklogLedger.getInstance().record(projectId, closed = null, open = it) }
+        } ?: return
         if (!project.isDisposed) ProjectTimeToday.getInstance(project).add(open)
     }
 
@@ -80,10 +78,15 @@ class ProjectActivityTracker(private val project: Project) : Disposable {
 
     override fun dispose() = close()
 
-    private fun store(session: WorkSession) {
-        WorklogLedger.getInstance().add(session)
+    // Held while the sessionizer changes, so the ledger's open entry never lags behind it.
+    private fun update(change: Sessionizer.() -> WorkSession?) {
+        val closed = synchronized(sessionizer) {
+            sessionizer.change()?.also { closed ->
+                WorklogLedger.getInstance().record(projectId, closed, sessionizer.openSession)
+            }
+        } ?: return
         // On project close the session still reaches the ledger, but project services may be gone.
-        if (!project.isDisposed) ProjectTimeToday.getInstance(project).add(session)
+        if (!project.isDisposed) ProjectTimeToday.getInstance(project).add(closed)
     }
 
     companion object {
