@@ -53,7 +53,7 @@ class ActivityMonitor : Disposable {
         openProjects().forEach { project ->
             val tracker = ProjectActivityTracker.getInstance(project)
             tracker.closeIfIdle(now)
-            tracker.countOpenSession()
+            tracker.persistOpenSession()
         }
 
         val settings = TempoSettings.getInstance()

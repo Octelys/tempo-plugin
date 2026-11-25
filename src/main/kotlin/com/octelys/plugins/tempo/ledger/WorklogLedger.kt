@@ -30,10 +30,22 @@ class WorklogLedger : PersistentStateComponent<WorklogLedger.LedgerState> {
 
         @get:XCollection(style = XCollection.Style.v2)
         var submitted: MutableList<SubmittedEntry> = mutableListOf()
+
+        @get:XCollection(style = XCollection.Style.v2)
+        var open: MutableList<OpenEntry> = mutableListOf()
     }
 
     @Tag("session")
     class SessionEntry {
+        var issueKey: String = ""
+        var startMillis: Long = 0
+        var endMillis: Long = 0
+    }
+
+    /** A project's session still being tracked, up to its last activity when it was recorded. */
+    @Tag("open")
+    class OpenEntry {
+        var projectId: String = ""
         var issueKey: String = ""
         var startMillis: Long = 0
         var endMillis: Long = 0
@@ -50,23 +62,58 @@ class WorklogLedger : PersistentStateComponent<WorklogLedger.LedgerState> {
 
     private val lock = Any()
     private var state = LedgerState()
+    private var initialized = false
 
     // A copy, so the platform can serialize it while tracking keeps mutating the live state.
     override fun getState(): LedgerState = synchronized(lock) {
         LedgerState().also { copy ->
             copy.pending = state.pending.toMutableList()
             copy.submitted = state.submitted.toMutableList()
+            copy.open = state.open.toMutableList()
         }
     }
 
-    override fun loadState(loaded: LedgerState) = synchronized(lock) { state = loaded }
-
-    fun add(session: WorkSession) = synchronized(lock) {
-        state.pending += SessionEntry().apply {
-            issueKey = session.issueKey
-            startMillis = session.startMillis
-            endMillis = session.endMillis
+    override fun loadState(loaded: LedgerState) = synchronized(lock) {
+        if (initialized) {
+            // A reload while running: the live open sessions are newer than the file's.
+            loaded.open = state.open
+        } else {
+            // Open sessions in the file were left by an IDE that did not shut down cleanly.
+            loaded.open.forEach { loaded.pending += sessionEntry(it.issueKey, it.startMillis, it.endMillis) }
+            loaded.open.clear()
         }
+        state = loaded
+    }
+
+    override fun initializeComponent() = synchronized(lock) { initialized = true }
+
+    /**
+     * Adds [closed] to the pending sessions and replaces the open session of [projectId] with
+     * [open], in one step so a save never sees the same time both pending and open.
+     */
+    fun record(projectId: String?, closed: WorkSession?, open: WorkSession?) = synchronized(lock) {
+        closed?.let { state.pending += sessionEntry(it.issueKey, it.startMillis, it.endMillis) }
+        if (projectId == null) return@synchronized
+
+        state.open.removeAll { it.projectId == projectId }
+        open?.let {
+            state.open += OpenEntry().apply {
+                this.projectId = projectId
+                issueKey = it.issueKey
+                startMillis = it.startMillis
+                endMillis = it.endMillis
+            }
+        }
+    }
+
+    fun open(): List<WorkSession> = synchronized(lock) {
+        state.open.map { WorkSession(it.issueKey, it.startMillis, it.endMillis) }
+    }
+
+    private fun sessionEntry(key: String, start: Long, end: Long) = SessionEntry().apply {
+        issueKey = key
+        startMillis = start
+        endMillis = end
     }
 
     fun pending(): List<WorkSession> = synchronized(lock) {
