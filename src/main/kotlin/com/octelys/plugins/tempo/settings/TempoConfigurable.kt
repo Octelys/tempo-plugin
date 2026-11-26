@@ -117,7 +117,7 @@ class TempoConfigurable(private val project: Project) : BoundConfigurable("Tempo
                 icon(IconUtil.scale(IconLoader.getIcon("/META-INF/pluginIcon.svg", TempoConfigurable::class.java), null, 0.8f))
                     .gap(RightGap.SMALL)
                 panel {
-                    row { label("Tempo Time Tracker").bold() }
+                    row { label("IDE Connector for Tempo").bold() }
                     row { comment("Counts the time you actively spend in the IDE and logs it to Tempo, one worklog per issue and day.") }
                 }
             }
