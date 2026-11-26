@@ -25,15 +25,26 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+
+/** A worklog in Tempo on one day; [issueKey] is `null` when the issue cannot be looked up. */
+data class DayWorklog(
+    val startTime: LocalTime,
+    val issueKey: String?,
+    val seconds: Long,
+    val description: String,
+    val byPlugin: Boolean,
+)
 
 /** Sends pending tracked time to Tempo, one worklog per issue and day. */
 @Service(Service.Level.APP)
 class WorklogSubmitter {
     private val running = AtomicBoolean(false)
     private val issueCache = ConcurrentHashMap<String, JiraIssue>()
+    private val issueKeysById = ConcurrentHashMap<Long, String>()
 
     /** Whether the last automatic submission failed; avoids repeating the same error every interval. */
     @Volatile
@@ -179,6 +190,41 @@ class WorklogSubmitter {
             }
     }
 
+    /**
+     * Everything logged in Tempo on [date] by the configured account, sent by this plugin or not.
+     * Blocks on the network; call it off the EDT.
+     */
+    fun loggedOn(date: LocalDate): List<DayWorklog> {
+        val settings = TempoSettings.getInstance()
+        val jira = jiraClient(settings)
+        val tempo = tempoClient(settings)
+        val accountId = accountId(settings, jira)
+        val own = WorklogLedger.getInstance().submitted().associate { it.tempoWorklogId to it.issueKey }
+
+        return tempo.worklogsOf(accountId, date, date)
+            .filter { it.startDate == date }
+            .map { worklog ->
+                val ownKey = own[worklog.tempoWorklogId]
+                DayWorklog(
+                    startTime = worklog.startTime,
+                    issueKey = ownKey ?: worklog.issueId?.let { issueKeyOf(jira, it) },
+                    seconds = worklog.timeSpentSeconds,
+                    description = worklog.description,
+                    byPlugin = ownKey != null,
+                )
+            }
+            .sortedBy { it.startTime }
+    }
+
+    /** The key of issue [issueId], or `null` when Jira does not show it to this account. */
+    private fun issueKeyOf(jira: JiraClient, issueId: Long): String? =
+        issueKeysById[issueId] ?: try {
+            jira.issue(issueId.toString()).key.also { issueKeysById[issueId] = it }
+        } catch (e: AtlassianApiException) {
+            thisLogger().info("Cannot look up Jira issue $issueId (HTTP ${e.statusCode})")
+            null
+        }
+
     private fun report(project: Project?, interactive: Boolean, outcome: Outcome) {
         if (outcome.failures.isNotEmpty()) {
             if (interactive || !lastAutomaticFailed) {
@@ -216,6 +262,7 @@ class WorklogSubmitter {
     /** Forgets cached Jira lookups, for example after the connection settings changed. */
     fun resetCaches() {
         issueCache.clear()
+        issueKeysById.clear()
         TempoSettings.getInstance().state.jiraAccountId = null
     }
 

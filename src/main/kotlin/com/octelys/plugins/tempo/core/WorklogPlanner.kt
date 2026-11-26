@@ -13,6 +13,8 @@ data class SubmittedWorklog(
     val startTime: LocalTime,
     val tempoWorklogId: Long,
     val rawSeconds: Long,
+    /** The time logged in Tempo after rounding; 0 for records made before it was kept. */
+    val loggedSeconds: Long = 0,
 )
 
 /** One worklog to create (when [existingWorklogId] is `null`) or update in Tempo. */
@@ -44,11 +46,16 @@ data class WorklogPlan(
  * since more time may follow. For past days, they round up to one increment, unless less than a
  * minute was tracked, in which case they are discarded.
  *
+ * A new worklog starts on a multiple of five minutes past the hour (see [startTimeOf]).
+ *
  * Tracked time inside a [BusySpan] is not counted, and a new worklog never starts inside one, so time
  * already logged in Tempo, such as a meeting, is not logged twice.
  */
 object WorklogPlanner {
     private const val SECONDS_PER_MINUTE = 60L
+
+    /** Worklogs start on a multiple of this many minutes past the hour. */
+    internal const val START_STEP_MINUTES = 5
 
     fun plan(
         pending: List<WorkSession>,
@@ -78,7 +85,7 @@ object WorklogPlanner {
                     rounded > 0 -> worklogs += PlannedWorklog(
                         issueKey = issueKey,
                         date = date,
-                        startTime = existing?.startTime ?: startTimeOf(free, zone),
+                        startTime = existing?.startTime ?: startTimeOf(free, zone, busy),
                         totalRawSeconds = totalRawSeconds,
                         pendingSeconds = pendingSeconds,
                         roundedSeconds = rounded,
@@ -99,9 +106,20 @@ object WorklogPlanner {
         return if (isPastDay && rawSeconds >= SECONDS_PER_MINUTE) incrementSeconds else 0
     }
 
-    private fun startTimeOf(free: List<LongRange>, zone: ZoneId): LocalTime =
-        Instant.ofEpochMilli(free.minOf { it.first })
-            .atZone(zone)
-            .toLocalTime()
-            .truncatedTo(ChronoUnit.SECONDS)
+    /**
+     * The first free instant, rounded down to a multiple of [START_STEP_MINUTES] past the hour. When
+     * that falls inside a busy span it rounds up instead, and when neither stays outside busy time on
+     * the same day the exact instant is kept.
+     */
+    internal fun startTimeOf(free: List<LongRange>, zone: ZoneId, busy: List<BusySpan>): LocalTime {
+        val first = Instant.ofEpochMilli(free.minOf { it.first }).atZone(zone).truncatedTo(ChronoUnit.SECONDS)
+        val floor = first.truncatedTo(ChronoUnit.MINUTES).withMinute(first.minute - first.minute % START_STEP_MINUTES)
+        val ceil = if (floor == first) floor else floor.plusMinutes(START_STEP_MINUTES.toLong())
+
+        fun isBusy(millis: Long) = busy.any { millis >= it.startMillis && millis < it.endMillis }
+        return listOf(floor, ceil)
+            .firstOrNull { it.toLocalDate() == first.toLocalDate() && !isBusy(it.toInstant().toEpochMilli()) }
+            ?.toLocalTime()
+            ?: first.toLocalTime()
+    }
 }
