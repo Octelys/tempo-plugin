@@ -10,7 +10,7 @@ import com.octelys.plugins.tempo.auth.TempoAuth
 import com.octelys.plugins.tempo.core.BusySpan
 import com.octelys.plugins.tempo.core.Durations
 import com.octelys.plugins.tempo.core.PlannedWorklog
-import com.octelys.plugins.tempo.core.SubmittedWorklog
+import com.octelys.plugins.tempo.core.WorklogPlacement
 import com.octelys.plugins.tempo.core.WorklogPlanner
 import com.octelys.plugins.tempo.ledger.WorklogLedger
 import com.octelys.plugins.tempo.settings.TempoCredentials
@@ -105,17 +105,33 @@ class WorklogSubmitter {
         val tempo = tempoClient(settings)
         val accountId = accountId(settings, jira)
 
-        val busy = busySpans(tempo, accountId, draft.worklogs.map { it.date }, previouslySubmitted, zone)
+        // Every block in Tempo by id, kept current as worklogs are sent so later ones avoid them too.
+        val blocks = loggedBlocks(tempo, accountId, draft.worklogs.map { it.date }, zone)
+        val own = previouslySubmitted.mapTo(HashSet()) { it.tempoWorklogId }
+        val busy = blocks.filterKeys { it !in own }.values.toList()
         val plan = WorklogPlanner.plan(pending, previouslySubmitted, settings.roundingMinutes, today, zone, busy)
         ledger.removePending(plan.discarded)
         if (plan.worklogs.isEmpty()) return Outcome(emptyList(), emptyList(), nothingToSubmit = true)
 
         val submitted = mutableListOf<PlannedWorklog>()
         val failures = mutableListOf<String>()
-        plan.worklogs.forEachIndexed { index, planned ->
+        plan.worklogs.forEachIndexed { index, unplaced ->
             indicator.fraction = index.toDouble() / plan.worklogs.size
-            indicator.text = "Logging ${Durations.format(planned.roundedSeconds)} on ${planned.issueKey}"
+            indicator.text = "Logging ${Durations.format(unplaced.roundedSeconds)} on ${unplaced.issueKey}"
             try {
+                val others = blocks.filterKeys { it != unplaced.existingWorklogId }.values
+                val start = WorklogPlacement.place(unplaced.date, unplaced.startTime, unplaced.roundedSeconds, others, zone)
+                if (start == null) {
+                    thisLogger().warn("No free ${unplaced.roundedSeconds}s in Tempo on ${unplaced.date} for ${unplaced.issueKey}; kept pending")
+                    failures += "${unplaced.issueKey} (${unplaced.date}): no free ${Durations.format(unplaced.roundedSeconds)} left " +
+                        "in Tempo that day without overlapping another worklog. The time stays pending."
+                    return@forEachIndexed
+                }
+                if (start != unplaced.startTime) {
+                    thisLogger().info("Moved the ${unplaced.issueKey} worklog on ${unplaced.date} from ${unplaced.startTime} to $start to avoid an overlap")
+                }
+                val planned = unplaced.copy(startTime = start)
+
                 val issue = issueCache.getOrPut(planned.issueKey) { jira.issue(planned.issueKey) }
                 val worklog = TempoWorklog(
                     authorAccountId = accountId,
@@ -127,10 +143,12 @@ class WorklogSubmitter {
                 )
                 val (logged, tempoWorklogId) = upsert(tempo, ledger, planned, worklog)
                 ledger.markSubmitted(logged, tempoWorklogId)
+                planned.existingWorklogId?.let(blocks::remove)
+                blocks[tempoWorklogId] = blockOf(logged.date, logged.startTime, logged.roundedSeconds, zone)
                 submitted += logged
             } catch (e: Exception) {
-                thisLogger().warn("Tempo submission failed for ${planned.issueKey} on ${planned.date}", e)
-                failures += "${planned.issueKey} (${planned.date}): ${e.message ?: e}"
+                thisLogger().warn("Tempo submission failed for ${unplaced.issueKey} on ${unplaced.date}", e)
+                failures += "${unplaced.issueKey} (${unplaced.date}): ${e.message ?: e}"
             }
         }
         return Outcome(submitted, failures, nothingToSubmit = false)
@@ -162,32 +180,32 @@ class WorklogSubmitter {
     }
 
     /**
-     * Time already logged in Tempo on [dates] by anything but this plugin, such as meetings.
-     * Without permission to read worklogs, tracked time is logged as is.
+     * Every block already logged in Tempo around [dates], this plugin's included, by Tempo id.
+     * Without permission to read worklogs, nothing could be placed safely, so this fails.
      */
-    private fun busySpans(
+    private fun loggedBlocks(
         tempo: TempoClient,
         accountId: String,
         dates: List<LocalDate>,
-        previouslySubmitted: List<SubmittedWorklog>,
         zone: ZoneId,
-    ): List<BusySpan> {
+    ): MutableMap<Long, BusySpan> {
         val logged = try {
-            // One more day, for sessions running past midnight.
-            tempo.worklogsOf(accountId, dates.min(), dates.max().plusDays(1))
+            // One more day each side, for worklogs running past midnight.
+            tempo.worklogsOf(accountId, dates.min().minusDays(1), dates.max().plusDays(1))
         } catch (e: AtlassianApiException) {
             if (e.statusCode != 401 && e.statusCode != 403) throw e
-            thisLogger().warn("Cannot read Tempo worklogs, so time already logged is not left out", e)
-            return emptyList()
+            thisLogger().warn("Cannot read Tempo worklogs, so worklogs cannot be placed without overlaps", e)
+            throw ConfigurationMissingException(
+                "Allow this connection to read your Tempo worklogs, so new worklogs never overlap existing ones. " +
+                    "Your time stays pending until then.",
+            )
         }
+        return logged.associateTo(HashMap()) { it.tempoWorklogId to blockOf(it.startDate, it.startTime, it.timeSpentSeconds, zone) }
+    }
 
-        val own = previouslySubmitted.mapTo(HashSet()) { it.tempoWorklogId }
-        return logged
-            .filter { it.tempoWorklogId !in own }
-            .map { worklog ->
-                val start = worklog.startDate.atTime(worklog.startTime).atZone(zone).toInstant().toEpochMilli()
-                BusySpan(start, start + worklog.timeSpentSeconds * 1000)
-            }
+    private fun blockOf(date: LocalDate, start: LocalTime, seconds: Long, zone: ZoneId): BusySpan {
+        val from = date.atTime(start).atZone(zone).toInstant().toEpochMilli()
+        return BusySpan(from, from + seconds * 1000)
     }
 
     /**
