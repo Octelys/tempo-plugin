@@ -1,4 +1,4 @@
-# ⏱️ Tempo Time Tracker for JetBrains IDEs
+# ⏱️ IDE Connector for Tempo
 
 Tracks the time you actively spend in Rider (or any JetBrains IDE) and logs it to
 [Tempo](https://www.tempo.io/) on Jira Cloud. Work on a branch named after a Jira issue, and the
