@@ -1,5 +1,6 @@
 package com.octelys.plugins.tempo.tracking
 
+import com.octelys.plugins.tempo.core.FocusTracker
 import com.octelys.plugins.tempo.settings.SubmissionMode
 import com.octelys.plugins.tempo.settings.TempoSettings
 import com.octelys.plugins.tempo.submission.WorklogSubmitter
@@ -28,6 +29,9 @@ class ActivityMonitor : Disposable {
 
     private var tick: ScheduledFuture<*>? = null
 
+    // Only touched from onUserActivity, which runs on the EDT.
+    private val focus = FocusTracker<String>()
+
     @Synchronized
     fun start() {
         if (tick != null) return
@@ -46,6 +50,11 @@ class ActivityMonitor : Disposable {
 
         val project = IdeFocusManager.getGlobalInstance().lastFocusedFrame?.project ?: return
         if (project.isDisposed || project.isDefault) return
+
+        // Keyed by location hash so this app service never holds on to a closed project.
+        focus.moveTo(project.locationHash)?.let { left ->
+            openProjects().find { it.locationHash == left }?.let { ProjectActivityTracker.getInstance(it).close() }
+        }
         ProjectActivityTracker.getInstance(project).recordActivity(now)
     }
 
