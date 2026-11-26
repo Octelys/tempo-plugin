@@ -37,7 +37,7 @@ class TempoSettings : SimplePersistentStateComponent<TempoSettings.State>(State(
         var submissionMode by enum(SubmissionMode.AUTOMATIC)
         var autoSubmitIntervalMinutes by property(5)
         var idleThresholdMinutes by property(5)
-        var roundingMinutes by property(1)
+        var roundingMinutes by property(5)
 
         /** Worklog description. Supports `{issue}` and `{summary}`. */
         var descriptionTemplate by string(DEFAULT_DESCRIPTION_TEMPLATE)
