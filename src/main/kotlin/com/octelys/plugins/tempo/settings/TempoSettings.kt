@@ -37,7 +37,7 @@ class TempoSettings : SimplePersistentStateComponent<TempoSettings.State>(State(
         var submissionMode by enum(SubmissionMode.AUTOMATIC)
         var autoSubmitIntervalMinutes by property(5)
         var idleThresholdMinutes by property(5)
-        var roundingMinutes by property(1)
+        var roundingMinutes by property(5)
 
         /** Worklog description. Supports `{issue}` and `{summary}`. */
         var descriptionTemplate by string(DEFAULT_DESCRIPTION_TEMPLATE)
@@ -57,7 +57,7 @@ class TempoSettings : SimplePersistentStateComponent<TempoSettings.State>(State(
     val submissionMode: SubmissionMode get() = state.submissionMode
     val autoSubmitIntervalMinutes: Int get() = state.autoSubmitIntervalMinutes.coerceIn(5, 24 * 60)
     val idleThresholdMillis: Long get() = state.idleThresholdMinutes.coerceIn(1, 120) * 60_000L
-    val roundingMinutes: Int get() = state.roundingMinutes.coerceIn(1, 60)
+    val roundingMinutes: Int get() = state.roundingMinutes.coerceIn(5, 60)
     val descriptionTemplate: String get() = state.descriptionTemplate.orEmpty().ifBlank { DEFAULT_DESCRIPTION_TEMPLATE }
 
     /** The compiled [State.branchIssuePattern], or `null` for the built-in detection (also when it is invalid). */

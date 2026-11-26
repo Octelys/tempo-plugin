@@ -93,7 +93,7 @@ Matching is case-sensitive unless the pattern starts with `(?i)`. Keys are upper
 
 - Tracked sessions are grouped by issue and day. The worklog starts at the day's first session
   on that issue.
-- Totals are rounded to the nearest increment (default 1 minute). Today's time that still rounds
+- Totals are rounded to the nearest increment (default 5 minutes). Today's time that still rounds
   to zero stays pending; past days round up to one increment.
 - If a worklog the plugin created is deleted in Tempo, the next submission creates a new one with
   only the time still pending. If you edit one in Tempo, the next submission on that issue that

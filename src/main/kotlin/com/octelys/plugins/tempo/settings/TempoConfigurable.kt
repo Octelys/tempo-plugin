@@ -232,7 +232,7 @@ class TempoConfigurable(private val project: Project) : BoundConfigurable("Tempo
                     label("minutes without input")
                 }
                 row("Round worklogs to:") {
-                    spinner(1..60).bindIntValue(settings::roundingMinutes)
+                    spinner(5..60).bindIntValue(settings::roundingMinutes)
                     label("minutes")
                 }
                 row("Worklog description:") {
