@@ -15,9 +15,13 @@ import java.time.ZonedDateTime
 object WorklogPlacement {
 
     /**
-     * The start of a block of [durationSeconds] on [date] that overlaps none of [taken]:
-     * [preferred] itself when free, else the first free multiple of [stepMinutes] past the hour
-     * after it, else the last free one before it. `null` when the day has no such gap.
+     * The start of a block of [durationSeconds] on [date] that overlaps none of [taken] and ends by
+     * [latestEndMillis]: [preferred] itself when it fits, else the first fitting multiple of
+     * [stepMinutes] past the hour after it, else the last fitting one before it. `null` when the day
+     * has no such gap.
+     *
+     * [latestEndMillis] is normally now, so time is never logged in the future, even when the only
+     * gap after a meeting is still to come.
      */
     fun place(
         date: LocalDate,
@@ -25,13 +29,14 @@ object WorklogPlacement {
         durationSeconds: Long,
         taken: Collection<BusySpan>,
         zone: ZoneId,
+        latestEndMillis: Long = Long.MAX_VALUE,
         stepMinutes: Int = WorklogPlanner.START_STEP_MINUTES,
     ): LocalTime? {
         val durationMillis = durationSeconds.coerceAtLeast(0) * 1000
         fun fits(start: ZonedDateTime): Boolean {
             val from = start.toInstant().toEpochMilli()
             val to = from + durationMillis
-            return taken.none { it.startMillis < to && it.endMillis > from }
+            return to <= latestEndMillis && taken.none { it.startMillis < to && it.endMillis > from }
         }
 
         val wanted = date.atTime(preferred).atZone(zone)

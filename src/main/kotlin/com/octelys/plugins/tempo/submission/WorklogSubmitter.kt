@@ -132,7 +132,15 @@ class WorklogSubmitter {
             indicator.text = "Logging ${Durations.format(unplaced.roundedSeconds)} on ${unplaced.issueKey}"
             try {
                 val others = blocks.filterKeys { it != unplaced.existingWorklogId }.values
-                val start = WorklogPlacement.place(unplaced.date, unplaced.startTime, unplaced.roundedSeconds, others, zone)
+                val start = WorklogPlacement.place(
+                    unplaced.date, unplaced.startTime, unplaced.roundedSeconds, others, zone,
+                    latestEndMillis = System.currentTimeMillis(),
+                )
+                if (start == null && unplaced.date == today) {
+                    // A gap before now may still free up, or the day's later gaps will be past by the next submission.
+                    thisLogger().info("No free ${unplaced.roundedSeconds}s before now in Tempo for ${unplaced.issueKey}; kept pending")
+                    return@forEachIndexed
+                }
                 if (start == null) {
                     thisLogger().warn("No free ${unplaced.roundedSeconds}s in Tempo on ${unplaced.date} for ${unplaced.issueKey}; kept pending")
                     failures += "${unplaced.issueKey} (${unplaced.date}): no free ${Durations.format(unplaced.roundedSeconds)} left " +
