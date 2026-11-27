@@ -105,6 +105,8 @@ data class TempoLoggedWorklog(
     val startDate: LocalDate,
     val startTime: LocalTime,
     val timeSpentSeconds: Long,
+    val issueId: Long? = null,
+    val description: String = "",
 )
 
 /** Tokens returned by Tempo's OAuth token endpoint. */
@@ -192,6 +194,9 @@ class TempoClient(apiUrl: String, private val apiToken: String) {
                     startTime = json.get("startTime")?.takeIf { it.isJsonPrimitive }?.asString
                         ?.let(LocalTime::parse) ?: LocalTime.MIDNIGHT,
                     timeSpentSeconds = json.get("timeSpentSeconds").asLong,
+                    issueId = json.get("issue")?.takeIf { it.isJsonObject }?.asJsonObject
+                        ?.get("id")?.takeIf { it.isJsonPrimitive }?.asLong,
+                    description = json.get("description")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
                 )
             }
             url = page.getAsJsonObject("metadata")?.get("next")?.takeIf { it.isJsonPrimitive }?.asString

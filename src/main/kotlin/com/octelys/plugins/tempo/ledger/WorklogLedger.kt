@@ -58,6 +58,7 @@ class WorklogLedger : PersistentStateComponent<WorklogLedger.LedgerState> {
         var startTime: String = ""
         var tempoWorklogId: Long = 0
         var rawSeconds: Long = 0
+        var loggedSeconds: Long = 0
     }
 
     private val lock = Any()
@@ -129,6 +130,7 @@ class WorklogLedger : PersistentStateComponent<WorklogLedger.LedgerState> {
                     startTime = LocalTime.parse(entry.startTime),
                     tempoWorklogId = entry.tempoWorklogId,
                     rawSeconds = entry.rawSeconds,
+                    loggedSeconds = entry.loggedSeconds,
                 )
             }.getOrNull()
         }
@@ -144,6 +146,7 @@ class WorklogLedger : PersistentStateComponent<WorklogLedger.LedgerState> {
             startTime = worklog.startTime.toString()
             this.tempoWorklogId = tempoWorklogId
             rawSeconds = worklog.totalRawSeconds
+            loggedSeconds = worklog.roundedSeconds
         }
     }
 

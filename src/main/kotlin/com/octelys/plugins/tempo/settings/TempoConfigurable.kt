@@ -16,10 +16,14 @@ import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.ui.dsl.builder.Row
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.util.Disposer
+import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.util.IconLoader
 import com.intellij.ui.dsl.builder.Cell
 import com.intellij.ui.dsl.builder.RightGap
+import com.intellij.ui.dsl.builder.TopGap
 import com.intellij.util.IconUtil
 import javax.swing.Icon
 import com.intellij.openapi.application.ApplicationManager
@@ -70,7 +74,7 @@ class TempoConfigurable(private val project: Project) : BoundConfigurable("Tempo
     }
 
     /** A one-line outcome next to a button: busy, success, or failure (full message in the tooltip). */
-    private class StatusLabel {
+    internal class StatusLabel {
         val label = JBLabel()
 
         fun busy(text: String) = show(AnimatedIcon.Default.INSTANCE, text)
@@ -105,9 +109,11 @@ class TempoConfigurable(private val project: Project) : BoundConfigurable("Tempo
     private val tempoStatus = StatusLabel()
     private val loginStatus = StatusLabel()
     private var defaultIssue = ""
+    private var uiDisposable: Disposable? = null
 
     override fun createPanel(): DialogPanel {
         defaultIssue = projectSettings.defaultIssue.orEmpty()
+        val today = TodayOverview(Disposer.newDisposable("Tempo settings").also { uiDisposable = it })
 
         lateinit var automatic: JBRadioButton
         lateinit var apiTokenRadio: JBRadioButton
@@ -120,6 +126,19 @@ class TempoConfigurable(private val project: Project) : BoundConfigurable("Tempo
                     row { label("IDE Connector for Tempo").bold() }
                     row { comment("Counts the time you actively spend in the IDE and logs it to Tempo, one worklog per issue and day.") }
                 }
+            }
+
+            group("Today") {
+                row { label("Tracked by this plugin") }
+                row { cell(today.trackedTable).align(AlignX.FILL) }
+                    .rowComment("Earlier days are listed while they still have time waiting to be sent.")
+                row { cell(today.trackedTotal) }
+                row {
+                    label("Logged in Tempo")
+                    iconButton("Reload from Tempo", AllIcons.Actions.Refresh) { today.refreshTempo() }
+                }.topGap(TopGap.MEDIUM)
+                row { cell(today.tempoTable).align(AlignX.FILL) }
+                row { cell(today.tempoStatus.label) }
             }
 
             group("Jira Cloud") {
@@ -291,7 +310,15 @@ class TempoConfigurable(private val project: Project) : BoundConfigurable("Tempo
         }.also {
             updateLoginStatus()
             loadSecrets()
+            today.refreshTracked()
+            today.refreshTempo()
         }
+    }
+
+    override fun disposeUIResources() {
+        uiDisposable?.let(Disposer::dispose)
+        uiDisposable = null
+        super.disposeUIResources()
     }
 
     private fun Cell<JButton>.withIcon(icon: Icon): Cell<JButton> = applyToComponent { this.icon = icon }

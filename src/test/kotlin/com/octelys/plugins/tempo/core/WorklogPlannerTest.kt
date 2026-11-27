@@ -144,6 +144,62 @@ class WorklogPlannerTest {
     }
 
     @Test
+    fun `a new worklog starts on the five minutes before the first tracked time`() {
+        val plan = plan(pending = listOf(session("ABC-1", today, "09:07:42", "09:40")), roundingMinutes = 1)
+
+        assertEquals(LocalTime.of(9, 5), plan.worklogs.single().startTime)
+    }
+
+    @Test
+    fun `a start already on five minutes is kept`() {
+        val plan = plan(pending = listOf(session("ABC-1", today, "09:10", "09:40")), roundingMinutes = 1)
+
+        assertEquals(LocalTime.of(9, 10), plan.worklogs.single().startTime)
+    }
+
+    @Test
+    fun `a start that would round down into a meeting rounds up instead`() {
+        val plan = plan(
+            pending = listOf(session("ABC-1", today, "09:00", "10:00")),
+            roundingMinutes = 1,
+            busy = listOf(busy(today, "08:45", "09:07")),
+        )
+
+        assertEquals(LocalTime.of(9, 10), plan.worklogs.single().startTime)
+    }
+
+    @Test
+    fun `a start that cannot move to five minutes without entering a meeting stays exact`() {
+        val plan = plan(
+            pending = listOf(session("ABC-1", today, "09:00", "10:00")),
+            roundingMinutes = 1,
+            busy = listOf(busy(today, "08:45", "09:07"), busy(today, "09:08", "09:20")),
+        )
+
+        assertEquals(LocalTime.of(9, 7), plan.worklogs.single().startTime)
+    }
+
+    @Test
+    fun `a start late in the day does not round up into the next day`() {
+        val plan = plan(
+            pending = listOf(session("ABC-1", yesterday, "23:50", "23:59:59")),
+            roundingMinutes = 1,
+            busy = listOf(busy(yesterday, "23:50", "23:57")),
+        )
+
+        assertEquals(LocalTime.of(23, 57), plan.worklogs.single().startTime)
+    }
+
+    @Test
+    fun `an existing worklog keeps its start time`() {
+        val submitted = SubmittedWorklog("ABC-1", today, LocalTime.of(8, 33, 12), tempoWorklogId = 42, rawSeconds = 600)
+
+        val plan = plan(pending = listOf(session("ABC-1", today, "10:02", "10:30")), submitted = listOf(submitted), roundingMinutes = 1)
+
+        assertEquals(LocalTime.of(8, 33, 12), plan.worklogs.single().startTime)
+    }
+
+    @Test
     fun `the planned worklog keeps the original sessions so they can be removed from pending`() {
         val tracked = session("ABC-1", today, "09:30", "11:00")
 
