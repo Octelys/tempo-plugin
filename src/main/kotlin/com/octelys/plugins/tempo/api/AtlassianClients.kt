@@ -109,6 +109,20 @@ data class TempoLoggedWorklog(
     val description: String = "",
 )
 
+/**
+ * A plan (planned time block) read back from Tempo Planner. [approvalStatus] is `APPROVED`,
+ * `REQUESTED` or `REJECTED`, or `null` when the plan needs no approval.
+ */
+data class TempoPlan(
+    val id: Long,
+    val startTime: LocalTime?,
+    val plannedSecondsByDay: Map<LocalDate, Long>,
+    val itemType: String?,
+    val itemId: String?,
+    val description: String,
+    val approvalStatus: String?,
+)
+
 /** Tokens returned by Tempo's OAuth token endpoint. */
 data class TempoOAuthTokens(val accessToken: String, val refreshToken: String, val expiresAtMillis: Long)
 
@@ -203,6 +217,40 @@ class TempoClient(apiUrl: String, private val apiToken: String) {
         }
         return worklogs
     }
+
+    /** Every plan of [accountId] overlapping [from] to [to], both included, approved or not. */
+    fun plansOf(accountId: String, from: LocalDate, to: LocalDate): List<TempoPlan> {
+        val account = URLEncoder.encode(accountId, StandardCharsets.UTF_8)
+        var url: String? = "$baseUrl/plans/user/$account?from=$from&to=$to&plannedTimeBreakdown=DAILY"
+        val plans = mutableListOf<TempoPlan>()
+        while (url != null) {
+            val page = send(requestTo(url).GET(), "Tempo")
+            page.getAsJsonArray("results")?.forEach { element ->
+                val json = element.asJsonObject
+                val item = json.get("planItem")?.takeIf { it.isJsonObject }?.asJsonObject
+                plans += TempoPlan(
+                    id = json.get("id").asLong,
+                    startTime = json.stringOrNull("startTime")?.let(LocalTime::parse),
+                    plannedSecondsByDay = json.getAsJsonObject("plannedTime")?.getAsJsonObject("days")
+                        ?.getAsJsonArray("values")
+                        ?.associate { day ->
+                            val value = day.asJsonObject
+                            LocalDate.parse(value.get("date").asString) to value.get("plannedSeconds").asLong
+                        }
+                        .orEmpty(),
+                    itemType = item?.stringOrNull("type"),
+                    itemId = item?.stringOrNull("id"),
+                    description = json.stringOrNull("description").orEmpty(),
+                    approvalStatus = json.get("planApproval")?.takeIf { it.isJsonObject }?.asJsonObject?.stringOrNull("status"),
+                )
+            }
+            url = page.getAsJsonObject("metadata")?.get("next")?.takeIf { it.isJsonPrimitive }?.asString
+        }
+        return plans
+    }
+
+    private fun JsonObject.stringOrNull(name: String): String? =
+        get(name)?.takeIf { it.isJsonPrimitive }?.asString
 
     private fun request(path: String): HttpRequest.Builder = requestTo(baseUrl + path)
 

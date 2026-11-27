@@ -39,6 +39,18 @@ data class DayWorklog(
     val byPlugin: Boolean,
 )
 
+/**
+ * A plan in Tempo on one day. [item] is the planned issue key, or a description of what else is
+ * planned; [approvalStatus] is `null` when the plan needs no approval.
+ */
+data class DayPlan(
+    val startTime: LocalTime?,
+    val item: String?,
+    val seconds: Long,
+    val description: String,
+    val approvalStatus: String?,
+)
+
 /** Sends pending tracked time to Tempo, one worklog per issue and day. */
 @Service(Service.Level.APP)
 class WorklogSubmitter {
@@ -232,6 +244,35 @@ class WorklogSubmitter {
                 )
             }
             .sortedBy { it.startTime }
+    }
+
+    /**
+     * Every plan of the configured account with time on [date], approved or not.
+     * Blocks on the network; call it off the EDT.
+     */
+    fun plannedOn(date: LocalDate): List<DayPlan> {
+        val settings = TempoSettings.getInstance()
+        val jira = jiraClient(settings)
+        val tempo = tempoClient(settings)
+        val accountId = accountId(settings, jira)
+
+        return tempo.plansOf(accountId, date, date)
+            .mapNotNull { plan ->
+                val seconds = plan.plannedSecondsByDay[date] ?: 0
+                if (seconds <= 0) return@mapNotNull null
+                DayPlan(
+                    startTime = plan.startTime,
+                    item = when {
+                        plan.itemId == null -> null
+                        plan.itemType == "ISSUE" -> plan.itemId.toLongOrNull()?.let { issueKeyOf(jira, it) }
+                        else -> "${plan.itemType.orEmpty().lowercase().replaceFirstChar { it.uppercase() }} ${plan.itemId}".trim()
+                    },
+                    seconds = seconds,
+                    description = plan.description,
+                    approvalStatus = plan.approvalStatus,
+                )
+            }
+            .sortedWith(compareBy(nullsLast()) { it.startTime })
     }
 
     /** The key of issue [issueId], or `null` when Jira does not show it to this account. */

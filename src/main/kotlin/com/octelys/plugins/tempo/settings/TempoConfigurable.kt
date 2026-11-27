@@ -134,7 +134,7 @@ class TempoConfigurable(private val project: Project) : BoundConfigurable("Tempo
                     .rowComment("Earlier days are listed while they still have time waiting to be sent.")
                 row { cell(today.trackedTotal) }
                 row {
-                    label("Logged in Tempo")
+                    label("Logged and planned in Tempo")
                     iconButton("Reload from Tempo", AllIcons.Actions.Refresh) { today.refreshTempo() }
                 }.topGap(TopGap.MEDIUM)
                 row { cell(today.tempoTable).align(AlignX.FILL) }
