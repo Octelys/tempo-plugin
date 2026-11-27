@@ -23,6 +23,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.util.IconLoader
 import com.intellij.ui.dsl.builder.Cell
 import com.intellij.ui.dsl.builder.RightGap
+import com.intellij.ui.dsl.builder.TopGap
 import com.intellij.util.IconUtil
 import javax.swing.Icon
 import com.intellij.openapi.application.ApplicationManager
@@ -130,12 +131,12 @@ class TempoConfigurable(private val project: Project) : BoundConfigurable("Tempo
             group("Today") {
                 row { label("Tracked by this plugin") }
                 row { cell(today.trackedTable).align(AlignX.FILL) }
-                    .comment("Earlier days are listed while they still have time waiting to be sent.")
+                    .rowComment("Earlier days are listed while they still have time waiting to be sent.")
                 row { cell(today.trackedTotal) }
                 row {
                     label("Logged in Tempo")
                     iconButton("Reload from Tempo", AllIcons.Actions.Refresh) { today.refreshTempo() }
-                }
+                }.topGap(TopGap.MEDIUM)
                 row { cell(today.tempoTable).align(AlignX.FILL) }
                 row { cell(today.tempoStatus.label) }
             }

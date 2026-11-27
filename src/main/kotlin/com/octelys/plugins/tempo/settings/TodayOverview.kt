@@ -19,6 +19,8 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.ui.ScrollPaneFactory
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.table.JBTable
+import com.intellij.util.ui.JBUI
+import java.awt.Dimension
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -109,9 +111,14 @@ internal class TodayOverview(parent: Disposable) {
             emptyText.text = empty
             setShowGrid(false)
             tableHeader.reorderingAllowed = false
-            visibleRowCount = VISIBLE_ROWS
         }
-        return ScrollPaneFactory.createScrollPane(table)
+        return ScrollPaneFactory.createScrollPane(table).apply {
+            // An empty table asks for almost no height, which crops the header and the empty text.
+            val insets = insets
+            val height = table.tableHeader.preferredSize.height + table.rowHeight * VISIBLE_ROWS + insets.top + insets.bottom
+            preferredSize = Dimension(JBUI.scale(MIN_WIDTH), height)
+            minimumSize = preferredSize
+        }
     }
 
     private fun seconds(value: Long) = if (value > 0) Durations.format(value) else "—"
@@ -124,6 +131,7 @@ internal class TodayOverview(parent: Disposable) {
 
     private companion object {
         const val VISIBLE_ROWS = 5
+        const val MIN_WIDTH = 400
         val TIME: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
     }
 }
