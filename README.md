@@ -28,6 +28,8 @@ time lands on that issue in Tempo, without timers to start or stop.
   choose, or only when you run *Tools › Tempo › Submit Worklogs*.
 - **Logs in to Tempo with OAuth 2.0.** No token to copy or renew by hand; an API token still works.
 - **Nothing gets lost.** Unsent time is saved and survives IDE restarts.
+- **Shows your day in the settings page:** time tracked by the plugin, plus everything logged in
+  Tempo today and your Tempo Planner plans, approved or not.
 
 ## Setup
 

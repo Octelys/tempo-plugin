@@ -5,6 +5,7 @@ import com.octelys.plugins.tempo.auth.ConfigurationMissingException
 import com.octelys.plugins.tempo.core.DayOverview
 import com.octelys.plugins.tempo.core.Durations
 import com.octelys.plugins.tempo.ledger.WorklogLedger
+import com.octelys.plugins.tempo.submission.DayPlan
 import com.octelys.plugins.tempo.submission.DayWorklog
 import com.octelys.plugins.tempo.submission.WorklogSubmitter
 import com.octelys.plugins.tempo.tracking.ActivityMonitor
@@ -22,6 +23,7 @@ import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
 import java.awt.Dimension
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -30,14 +32,14 @@ import javax.swing.table.DefaultTableModel
 
 /**
  * The day at a glance on the settings page: per issue, the time this plugin sent to Tempo and the
- * time still pending, and everything logged in Tempo today. Read-only.
+ * time still pending, and everything logged or planned in Tempo today. Read-only.
  */
 internal class TodayOverview(parent: Disposable) {
     private val trackedModel = ReadOnlyModel("Issue", "Day", "Sent to Tempo", "Pending")
-    private val tempoModel = ReadOnlyModel("Start", "Issue", "Duration", "Description", "Logged by")
+    private val tempoModel = ReadOnlyModel("Start", "Issue", "Duration", "Description", "Type")
 
     val trackedTable: JComponent = tableOf(trackedModel, "Nothing tracked today")
-    val tempoTable: JComponent = tableOf(tempoModel, "Nothing logged in Tempo today")
+    val tempoTable: JComponent = tableOf(tempoModel, "Nothing logged or planned in Tempo today")
     val trackedTotal = JBLabel()
     val tempoStatus = TempoConfigurable.StatusLabel()
 
@@ -67,22 +69,34 @@ internal class TodayOverview(parent: Disposable) {
             "Total: ${Durations.format(lines.sumOf { it.sentSeconds })} sent · ${Durations.format(lines.sumOf { it.pendingSeconds })} pending"
     }
 
-    /** Asks Tempo for today's worklogs in the background. */
+    /** Asks Tempo for today's worklogs and plans in the background. */
     fun refreshTempo() {
-        tempoStatus.busy("Loading today's worklogs from Tempo…")
+        tempoStatus.busy("Loading today's worklogs and plans from Tempo…")
         val application = ApplicationManager.getApplication()
         application.executeOnPooledThread {
-            val result = runCatching { WorklogSubmitter.getInstance().loggedOn(LocalDate.now()) }
-            application.invokeLater({ showTempo(result) }, ModalityState.any(), expired)
+            val today = LocalDate.now()
+            val submitter = WorklogSubmitter.getInstance()
+            val worklogs = runCatching { submitter.loggedOn(today) }
+            val plans = if (worklogs.isSuccess) runCatching { submitter.plannedOn(today) } else Result.success(emptyList())
+            application.invokeLater({ showTempo(worklogs, plans) }, ModalityState.any(), expired)
         }
     }
 
-    private fun showTempo(result: Result<List<DayWorklog>>) {
+    private fun showTempo(result: Result<List<DayWorklog>>, plans: Result<List<DayPlan>>) {
         result.onSuccess { worklogs ->
-            tempoModel.replaceRows(worklogs.map {
-                listOf(it.startTime.format(TIME), it.issueKey ?: "—", Durations.format(it.seconds), it.description, if (it.byPlugin) "This plugin" else "Other")
+            val planned = plans.getOrDefault(emptyList())
+            val rows = worklogs.map { TempoRow(it.startTime, it.issueKey, it.seconds, it.description, if (it.byPlugin) "Worklog · this plugin" else "Worklog") } +
+                planned.map { TempoRow(it.startTime, it.item, it.seconds, it.description, planType(it.approvalStatus)) }
+            tempoModel.replaceRows(rows.sortedWith(compareBy(nullsLast()) { it.start }).map {
+                listOf(it.start?.format(TIME) ?: "—", it.item ?: "—", Durations.format(it.seconds), it.description, it.type)
             })
-            tempoStatus.ok("${Durations.format(worklogs.sumOf { it.seconds })} logged in Tempo today")
+
+            val summary = "${Durations.format(worklogs.sumOf { it.seconds })} logged · " +
+                "${Durations.format(planned.sumOf { it.seconds })} planned in Tempo today"
+            plans.onSuccess { tempoStatus.ok(summary) }.onFailure { error ->
+                thisLogger().info("Could not load today's Tempo plans", error)
+                tempoStatus.warning("${Durations.format(worklogs.sumOf { it.seconds })} logged in Tempo today · plans unavailable: ${error.message ?: error}")
+            }
         }.onFailure { error ->
             tempoModel.replaceRows(emptyList())
             when {
@@ -95,6 +109,16 @@ internal class TodayOverview(parent: Disposable) {
                 }
             }
         }
+    }
+
+    private class TempoRow(val start: LocalTime?, val item: String?, val seconds: Long, val description: String, val type: String)
+
+    private fun planType(approvalStatus: String?) = when (approvalStatus) {
+        null -> "Plan"
+        "APPROVED" -> "Plan · approved"
+        "REQUESTED" -> "Plan · awaiting approval"
+        "REJECTED" -> "Plan · rejected"
+        else -> "Plan · ${approvalStatus.lowercase()}"
     }
 
     private class ReadOnlyModel(vararg columns: String) : DefaultTableModel(columns, 0) {
