@@ -85,8 +85,44 @@ class WorklogPlacementTest {
         assertEquals(LocalTime.of(23, 0), start)
     }
 
-    private fun place(preferred: String, minutes: Long, taken: List<BusySpan> = emptyList()) =
-        WorklogPlacement.place(day, LocalTime.parse(preferred), minutes * 60, taken, zone)
+    @Test
+    fun `a block blocked by a meeting goes before it rather than into the future`() {
+        val start = place(
+            "09:00",
+            minutes = 60,
+            taken = listOf(block("09:30", "11:00")),
+            now = "10:15",
+        )
+
+        assertEquals(LocalTime.of(8, 30), start)
+    }
+
+    @Test
+    fun `a free preferred start running past now moves earlier`() {
+        val start = place("09:00", minutes = 60, now = "09:50")
+
+        assertEquals(LocalTime.of(8, 50), start)
+    }
+
+    @Test
+    fun `a block ending exactly now fits`() {
+        val start = place("09:00", minutes = 60, now = "10:00")
+
+        assertEquals(LocalTime.of(9, 0), start)
+    }
+
+    @Test
+    fun `with no gap before now there is no place`() {
+        val start = place("09:00", minutes = 60, taken = listOf(block("00:00", "09:30")), now = "10:00")
+
+        assertNull(start)
+    }
+
+    private fun place(preferred: String, minutes: Long, taken: List<BusySpan> = emptyList(), now: String? = null) =
+        WorklogPlacement.place(
+            day, LocalTime.parse(preferred), minutes * 60, taken, zone,
+            latestEndMillis = now?.let { millis(day, it) } ?: Long.MAX_VALUE,
+        )
 
     private fun block(start: String, end: String) = BusySpan(millis(day, start), millis(day, end))
 
